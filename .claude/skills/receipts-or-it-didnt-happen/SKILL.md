@@ -26,7 +26,7 @@ description: Record SHA-256 receipts for real evidence files without mistaking a
 ## Result contract
 - Status RECORDED_NOT_VERIFIED means the tool hashed files and produced a deterministic JSON record.
 - Each evidence row has path, byte length, and SHA-256 digest.
-- Missing files, symlinks, duplicate files, and read errors fail closed.
+- Missing files, symlinks in any evidence path component, and duplicate file identities (including hard links on filesystems with inode identifiers) fail closed.
 - No tests are run and no evidence is interpreted semantically.
 
 ## Captain's report

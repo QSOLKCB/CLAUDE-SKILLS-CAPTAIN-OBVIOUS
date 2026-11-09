@@ -1,167 +1,481 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="theme-color" content="#f6f1e8">
-    <meta name="description" content="Captain Obvious: a Claude skill for confidently explaining what everyone already knows.">
-    <title>Captain Obvious — Claude, but more obvious</title>
-    <style>
-      :root {
-        color-scheme: light;
-        --ink: #20231f;
-        --muted: #64675e;
-        --paper: #f6f1e8;
-        --card: #fffdf8;
-        --accent: #c0442f;
-        --line: #ded8cb;
-      }
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#171a17">
+  <meta name="description" content="Captain Obvious: three executable Claude Code skills, zero imaginary green ticks, and more status updates than anyone ordered.">
+  <title>Captain Obvious — Finally, a status update that does something</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #171a17;
+      --panel: #232820;
+      --panel-2: #2c3228;
+      --paper: #f0e6cf;
+      --subtle: #bfb7a3;
+      --line: #55594d;
+      --acid: #d5f36e;
+      --red: #ff8062;
+      --ink: #1c261a;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--paper);
+      font: 16px/1.55 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    a { color: inherit; }
+    a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visible {
+      outline: 3px solid var(--acid);
+      outline-offset: 3px;
+    }
+    .wrap { width: min(1120px, calc(100% - 2.2rem)); margin-inline: auto; }
+    .topline {
+      border-bottom: 1px solid var(--line);
+      background: #121612;
+      color: var(--acid);
+      padding: .44rem 0;
+      font: 700 .68rem/1.5 ui-monospace, "Cascadia Code", monospace;
+      text-align: center;
+      letter-spacing: .13em;
+      text-transform: uppercase;
+    }
+    header { border-bottom: 1px solid var(--line); }
+    .nav {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: .75rem 2rem;
+      padding-block: 1.25rem;
+    }
+    .brand {
+      font: 900 1.05rem/1 ui-monospace, monospace;
+      letter-spacing: -.06em;
+      text-decoration: none;
+    }
+    .brand-mark {
+      display: inline-grid;
+      place-items: center;
+      background: var(--acid);
+      color: var(--ink);
+      width: 2.1rem;
+      height: 2.1rem;
+      transform: rotate(-7deg);
+      margin-right: .5rem;
+    }
+    .nav-links { display: flex; flex-wrap: wrap; gap: .6rem 1.6rem; }
+    .nav-links a {
+      color: var(--subtle);
+      font: 700 .73rem/1.4 ui-monospace, monospace;
+      text-decoration: none;
+      text-transform: uppercase;
+    }
+    .nav-links a:hover { color: var(--acid); }
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1.45fr) minmax(225px, .55fr);
+      align-items: center;
+      gap: 2rem;
+      padding-block: clamp(3.6rem, 9vw, 8rem);
+    }
+    .kicker, .mini {
+      color: var(--acid);
+      font: 800 .76rem/1.5 ui-monospace, monospace;
+      letter-spacing: .11em;
+      text-transform: uppercase;
+    }
+    h1, h2, h3, p { margin-top: 0; }
+    h1 {
+      margin: 1rem 0 1.4rem;
+      font-size: clamp(3.75rem, 9.7vw, 8.6rem);
+      letter-spacing: -.095em;
+      line-height: .84;
+      font-weight: 950;
+      text-transform: uppercase;
+    }
+    h1 em { font-style: normal; color: var(--acid); }
+    .intro { max-width: 660px; color: var(--subtle); font-size: clamp(1.02rem, 2.6vw, 1.35rem); }
+    .intro strong { color: var(--paper); }
+    .actions { display: flex; flex-wrap: wrap; gap: .8rem; padding-top: .6rem; }
+    .button {
+      display: inline-flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 44px;
+      padding: .8rem 1.05rem;
+      border: 1px solid var(--acid);
+      border-radius: 0;
+      background: var(--acid);
+      color: var(--ink);
+      font: 850 .82rem/1.3 ui-monospace, monospace;
+      text-decoration: none;
+      cursor: pointer;
+    }
+    .button:hover { background: #eaffaa; }
+    .button.secondary { background: transparent; color: var(--acid); }
+    .button.secondary:hover { background: #303b27; }
+    .seal {
+      aspect-ratio: 1;
+      width: min(100%, 320px);
+      margin: auto;
+      border: 6px double var(--acid);
+      border-radius: 50%;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      transform: rotate(13deg);
+      text-align: center;
+      color: var(--acid);
+      box-shadow: inset 0 0 0 12px var(--bg), inset 0 0 0 14px var(--acid);
+      padding: 2.5rem;
+    }
+    .seal .star { font-size: clamp(3.4rem, 7vw, 5.5rem); line-height: 1; }
+    .seal strong { font: 950 clamp(1.2rem, 2.4vw, 1.7rem)/1.05 ui-monospace, monospace; }
+    .seal small { font: 800 .61rem/1.5 ui-monospace, monospace; letter-spacing: .1em; margin-top: .6rem; }
+    .metrics { background: var(--acid); color: var(--ink); }
+    .metrics-inner { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; padding-block: 1.4rem; }
+    .metric { border-left: 2px solid #6e7c37; padding-left: 1rem; }
+    .metric strong { display: block; font: 950 clamp(1.6rem, 4vw, 2.7rem)/1.2 ui-monospace, monospace; }
+    .metric span { font: 700 .72rem/1.5 ui-monospace, monospace; text-transform: uppercase; }
+    section.block { padding-block: clamp(3.6rem, 8vw, 6.4rem); border-bottom: 1px solid var(--line); }
+    .section-head { max-width: 800px; margin-bottom: 2rem; }
+    .section-head h2 { font-size: clamp(2.25rem, 6vw, 4rem); line-height: 1; letter-spacing: -.06em; margin: .65rem 0 1rem; }
+    .section-head p { color: var(--subtle); max-width: 680px; }
+    .skill-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; }
+    .skill {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      padding: 1.55rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      min-width: 0;
+    }
+    .skill .number { color: var(--red); font: 800 .75rem/1.4 ui-monospace, monospace; }
+    .skill h3 { font-size: 1.7rem; line-height: 1.07; letter-spacing: -.04em; margin: 0; }
+    .skill p { color: var(--subtle); margin: 0; }
+    .skill pre {
+      overflow-x: auto;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      margin: 0;
+      padding: .9rem;
+      color: var(--acid);
+      background: #141914;
+      border-left: 3px solid var(--acid);
+      font: .75rem/1.5 ui-monospace, monospace;
+    }
+    .skill a {
+      margin-top: auto;
+      color: var(--acid);
+      font: 800 .76rem/1.4 ui-monospace, monospace;
+      text-underline-offset: 4px;
+    }
+    .label {
+      display: block;
+      color: var(--paper);
+      font: 750 .8rem/1.45 ui-monospace, monospace;
+      margin-bottom: .5rem;
+    }
+    .terminal-shell {
+      display: grid;
+      grid-template-columns: 1.1fr .9fr;
+      gap: 1rem;
+    }
+    .station, .readout {
+      border: 1px solid var(--line);
+      background: var(--panel);
+      padding: clamp(1.2rem, 3vw, 2rem);
+      min-width: 0;
+    }
+    .station p, .readout p { color: var(--subtle); }
+    .station input[type="text"], .station input[type="file"] {
+      display: block;
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid #7b8171;
+      padding: .85rem;
+      color: var(--paper);
+      font: .9rem/1.5 ui-monospace, monospace;
+    }
+    .station input[type="file"] { padding: .7rem; font-size: .76rem; }
+    .field { margin-bottom: 1.15rem; }
+    .fine { font-size: .83rem; color: var(--subtle); }
+    .readout pre {
+      background: #101510;
+      color: var(--acid);
+      min-height: 240px;
+      max-height: 460px;
+      overflow: auto;
+      overflow-wrap: anywhere;
+      white-space: pre-wrap;
+      margin: 1rem 0 0;
+      padding: 1.1rem;
+      font: .79rem/1.55 ui-monospace, monospace;
+      border: 1px solid #4a5942;
+    }
+    .timeline { display: grid; grid-template-columns: repeat(3, 1fr); gap: .9rem; }
+    .timeline article { padding: 1.3rem 0; border-top: 3px solid var(--red); }
+    .timeline h3 { font-size: 1.12rem; line-height: 1.2; }
+    .timeline p { color: var(--subtle); margin: 0; }
+    .quotes { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    .quote-box { background: var(--paper); color: var(--ink); padding: clamp(1.2rem, 3vw, 2rem); }
+    .quote-box .mini { color: #a4472d; }
+    .quote-box blockquote { font-size: clamp(1.4rem, 3vw, 2rem); line-height: 1.2; font-weight: 850; letter-spacing: -.04em; margin: .6rem 0 1.3rem; }
+    .quote-box p { font-size: .85rem; }
+    .status-box { border: 1px solid var(--line); padding: clamp(1.2rem, 3vw, 2rem); }
+    .status-box output { display: block; min-height: 5rem; color: var(--paper); font: 1.1rem/1.5 ui-monospace, monospace; margin-block: 1rem; }
+    .status-box .button { margin-top: .7rem; }
+    footer { padding-block: 2.5rem 3rem; color: var(--subtle); font-size: .84rem; }
+    .footer-inner { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 1rem; }
+    footer strong { color: var(--paper); }
+    @media (max-width: 850px) {
+      .hero { grid-template-columns: 1fr; }
+      .seal { display: none; }
+      .skill-grid, .timeline { grid-template-columns: 1fr; }
+      .terminal-shell, .quotes { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 530px) {
+      .metrics-inner { gap: .3rem; }
+      .metric { padding-left: .5rem; }
+      .metric span { font-size: .6rem; }
+      .nav-links { gap: .4rem .9rem; }
+      h1 { font-size: clamp(3.3rem, 16vw, 5rem); }
+      .actions .button { width: 100%; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+    }
+  </style>
+</head>
+<body id="top">
+  <div class="topline">Official department of stating the bleeding obvious // independent parody</div>
+  <header>
+    <nav class="nav wrap" aria-label="Main navigation">
+      <a class="brand" href="#top"><span class="brand-mark" aria-hidden="true">CO</span> CAPTAIN OBVIOUS</a>
+      <div class="nav-links">
+        <a href="#skills">Actual skills</a>
+        <a href="#lab">Receipt laboratory</a>
+        <a href="#incident">The incident</a>
+        <a href="https://github.com/QSOLKCB/CLAUDE-SKILLS-CAPTAIN-OBVIOUS">Source code</a>
+      </div>
+    </nav>
+  </header>
 
-      * { box-sizing: border-box; }
+  <main>
+    <div class="hero wrap">
+      <div>
+        <p class="kicker">Release candidate: Department of Unnecessary Announcements</p>
+        <h1>LESS<br>TALK.<br><em>MORE</em><br>OBVIOUS.</h1>
+        <p class="intro">You asked an AI to build something. It announced it was going to <strong>look at the files.</strong> Then it announced that it <strong>looked at the files.</strong> We gave the announcement a Python script. It's now legally classified as a skill.</p>
+        <div class="actions">
+          <a class="button" href="#skills">Inspect the actual skills</a>
+          <a class="button secondary" href="#lab">Issue a real receipt</a>
+        </div>
+      </div>
+      <aside class="seal" aria-label="Captain Obvious official seal, certified something happened">
+        <span class="star" aria-hidden="true">✓</span>
+        <strong>IT HAS BEEN<br>OBSERVED.</strong>
+        <small>Office of Evidentiary Obviousness<br>Est. five minutes ago</small>
+      </aside>
+    </div>
 
-      body {
-        margin: 0;
-        background: var(--paper);
-        color: var(--ink);
-        font: 16px/1.6 system-ui, sans-serif;
-      }
+    <div class="metrics" aria-label="Project features">
+      <div class="metrics-inner wrap">
+        <div class="metric"><strong>03</strong><span>Executable skills</span></div>
+        <div class="metric"><strong>00</strong><span>Runtime packages</span></div>
+        <div class="metric"><strong>∞</strong><span>Available status updates</span></div>
+      </div>
+    </div>
 
-      main {
-        width: min(100% - 2rem, 940px);
-        margin: 0 auto;
-        padding: 4rem 0 3rem;
-      }
-
-      .eyebrow {
-        color: var(--accent);
-        font-size: .78rem;
-        font-weight: 800;
-        letter-spacing: .14em;
-        text-transform: uppercase;
-      }
-
-      h1 {
-        max-width: 760px;
-        margin: .5rem 0 1rem;
-        font-size: clamp(2.8rem, 9vw, 6.4rem);
-        letter-spacing: -.075em;
-        line-height: .96;
-      }
-
-      h1 span { color: var(--accent); }
-
-      .intro {
-        max-width: 620px;
-        color: var(--muted);
-        font-size: 1.2rem;
-      }
-
-      .card {
-        margin: 3rem 0 2rem;
-        padding: clamp(1.25rem, 5vw, 2.5rem);
-        border: 1px solid var(--line);
-        border-radius: 1rem;
-        background: var(--card);
-        box-shadow: 0 12px 40px #3428170c;
-      }
-
-      .label {
-        margin: 0 0 .75rem;
-        color: var(--muted);
-        font-size: .75rem;
-        font-weight: 800;
-        letter-spacing: .1em;
-        text-transform: uppercase;
-      }
-
-      blockquote {
-        margin: 0;
-        font-size: clamp(1.15rem, 3vw, 1.55rem);
-        font-weight: 650;
-        line-height: 1.45;
-      }
-
-      .punchline {
-        margin: 1.5rem 0 0;
-        color: var(--accent);
-        font-weight: 750;
-      }
-
-      .facts {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-        gap: 1rem;
-        margin: 2rem 0 3rem;
-      }
-
-      .fact {
-        padding: 1rem;
-        border-top: 2px solid var(--line);
-      }
-
-      .fact strong { display: block; }
-      .fact p { margin: .35rem 0 0; color: var(--muted); }
-
-      footer {
-        padding-top: 1.25rem;
-        border-top: 1px solid var(--line);
-        color: var(--muted);
-        font-size: .9rem;
-      }
-
-      @media (prefers-reduced-motion: reduce) {
-        *, *::before, *::after { scroll-behavior: auto !important; }
-      }
-    </style>
-  </head>
-  <body>
-    <main>
-      <p class="eyebrow">A skill for Claude</p>
-      <h1>Captain <span>Obvious</span></h1>
-      <p class="intro">
-        Turn any update into a confident, carefully structured explanation
-        of what just happened—and, when possible, what the word “until” means.
-      </p>
-
-      <section class="card" aria-labelledby="sample-heading">
-        <p class="label" id="sample-heading">A sample field report</p>
-        <blockquote>
-          “Nothing for me to do until the review replies. When it does, I’ll
-          check each finding before changing anything. The review has now
-          replied. I’ll check each finding before changing anything.”
-        </blockquote>
-        <p class="punchline">Status: the status has been updated.</p>
-      </section>
-
-      <section class="card" aria-labelledby="wrong-repo-heading">
-        <p class="label" id="wrong-repo-heading">When you say “sorry, wrong repo”</p>
-        <blockquote>
-          “No problem. I haven’t changed the wrong repo. Its checks are green,
-          its reviews are reviewed, and the check that didn’t run found nothing
-          because it didn’t run. Shall I merge the thing we’re no longer
-          talking about?”
-        </blockquote>
-        <p class="punchline">Status: wrong repo, full report.</p>
-      </section>
-
-      <section class="facts" aria-label="Captain Obvious principles">
-        <article class="fact">
-          <strong>Water is wet.</strong>
-          <p>Unless the discussion is about definitions. Then prepare a thread.</p>
+    <section id="skills" class="block wrap" aria-labelledby="skills-heading">
+      <div class="section-head">
+        <p class="mini">01 / An unexpected outbreak of competence</p>
+        <h2 id="skills-heading">The skills are real.<br>We apologise.</h2>
+        <p>No single-sentence Markdown files pretending to be engineering. Each skill has a procedure, a real Python implementation and an offline test contract. It turns out doing the thing is more persuasive than announcing you're about to do the thing.</p>
+      </div>
+      <div class="skill-grid">
+        <article class="skill">
+          <span class="number">SKILL 001 // WRONG REPO DETECTOR</span>
+          <h3>Am I even in the right repository?</h3>
+          <p>Checks the actual GitHub origin and, optionally, whether your worktree is dirty. Prevents a twelve-point architecture review of somebody else's project.</p>
+          <pre aria-label="Repository check command">python3 tools/obvious.py repo
+  --path .
+  --expected OWNER/REPO</pre>
+          <a href="https://github.com/QSOLKCB/CLAUDE-SKILLS-CAPTAIN-OBVIOUS/blob/main/.claude/skills/wrong-repository-preflight/SKILL.md">Read the skill and its failure conditions ↗</a>
         </article>
-        <article class="fact">
-          <strong>The sky is blue.</strong>
-          <p>More precisely: it is above you, which is where skies tend to be.</p>
+        <article class="skill">
+          <span class="number">SKILL 002 // RECEIPT DEPARTMENT</span>
+          <h3>That's a lovely claim. Got a file?</h3>
+          <p>Hashes existing evidence files and prints a machine-readable receipt. A SHA-256 digest proves which bytes you had, not whether those bytes were telling the truth.</p>
+          <pre aria-label="Evidence receipt command">python3 tools/obvious.py receipt
+  --claim "Tests passed"
+  --evidence report.json</pre>
+          <a href="https://github.com/QSOLKCB/CLAUDE-SKILLS-CAPTAIN-OBVIOUS/blob/main/.claude/skills/receipts-or-it-didnt-happen/SKILL.md">Read the skill and its inconvenient caveats ↗</a>
         </article>
-        <article class="fact">
-          <strong>No code was changed.</strong>
-          <p>This conclusion was reached after a thorough review of the unchanged code.</p>
+        <article class="skill">
+          <span class="number">SKILL 003 // TICK POLICE</span>
+          <h3>Pixels may move. State may not.</h3>
+          <p>Pins deterministic snapshot files before visual refactors and verifies byte parity afterwards. Does not confuse "it still looks cool" with a simulation test.</p>
+          <pre aria-label="File parity command">python3 tools/obvious.py pin
+  verify --root .
+  --manifest pins.json</pre>
+          <a href="https://github.com/QSOLKCB/CLAUDE-SKILLS-CAPTAIN-OBVIOUS/blob/main/.claude/skills/no-ghosts-in-the-tick/SKILL.md">Read the skill and actually test your ticks ↗</a>
         </article>
-      </section>
+      </div>
+    </section>
 
-      <footer>
-        Captain Obvious: making the obvious unmistakable, one update at a time.
-      </footer>
-    </main>
-  </body>
+    <section id="lab" class="block wrap" aria-labelledby="lab-heading">
+      <div class="section-head">
+        <p class="mini">02 / No imaginary CI badges allowed</p>
+        <h2 id="lab-heading">The receipt laboratory.</h2>
+        <p>Choose a real file. We'll compute its real SHA-256 digest in your browser. Nothing is uploaded. The claim remains gloriously unproven until someone actually examines the evidence.</p>
+      </div>
+      <div class="terminal-shell">
+        <form id="receipt-form" class="station">
+          <label class="label" for="claim">Your bold assertion</label>
+          <div class="field">
+            <input id="claim" name="claim" type="text" maxlength="240" value="I have definitely finished the task." required>
+          </div>
+          <label class="label" for="evidence">Evidence file from your computer</label>
+          <div class="field">
+            <input id="evidence" name="evidence" type="file" required>
+          </div>
+          <p class="fine">Maximum 16 MiB. Processed locally with Web Crypto on HTTPS. No server, no telemetry, no "I'll inspect the file now" animation.</p>
+          <button class="button" type="submit">Hash the actual file</button>
+        </form>
+        <div class="readout" aria-label="Evidence receipt output">
+          <span class="mini">Receipt station / output channel</span>
+          <pre id="receipt-output" role="status" aria-live="polite">STATUS: AWAITING EVIDENCE
+
+The absence of a file has been independently confirmed.
+
+No bytes were harmed in the preparation of this announcement.</pre>
+        </div>
+      </div>
+    </section>
+
+    <section id="incident" class="block wrap" aria-labelledby="incident-heading">
+      <div class="section-head">
+        <p class="mini">03 / Case file: the great ten-cabinet briefing</p>
+        <h2 id="incident-heading">A transcript of doing<br>the obvious, thoroughly.</h2>
+        <p>Inspired by a supplied Claude Code log concerning ARCADE 2, VANILLAJS and OPT. Its statements are <strong>reported in the log</strong>, not independently verified here. Good engineering deserves receipts; progress commentary deserves an editor.</p>
+      </div>
+      <div class="timeline">
+        <article>
+          <span class="mini">Dispatch 01</span>
+          <h3>"I’ll start by reading the project rules."</h3>
+          <p>Excellent. We have established a strong commitment to reading before not reading.</p>
+        </article>
+        <article>
+          <span class="mini">Dispatch 02</span>
+          <h3>207 of 207 tests reportedly passed.</h3>
+          <p>Now that's useful. Put the test output in the evidence column; keep the victory speech under a word limit.</p>
+        </article>
+        <article>
+          <span class="mini">Dispatch 03</span>
+          <h3>Ten cabinets. State hashes pinned.</h3>
+          <p>Determinism is not a motivational poster. Re-run the snapshots after your beautiful particles arrive.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="block wrap" aria-labelledby="announcements-heading">
+      <div class="section-head">
+        <p class="mini">04 / Infinite executive communications</p>
+        <h2 id="announcements-heading">Your status update<br>has a status update.</h2>
+      </div>
+      <div class="quotes">
+        <div class="quote-box">
+          <span class="mini">Official observation</span>
+          <blockquote>“I will now verify that the verification process has been verified.”</blockquote>
+          <p>— Captain Obvious, Senior Vice President of Things That Were Already True</p>
+        </div>
+        <div class="status-box">
+          <span class="mini">Bureaucracy as a service / no subscription</span>
+          <output id="announcement" aria-live="polite">Update #000: The update generator has been identified. Its function is to generate updates.</output>
+          <button class="button secondary" id="more-updates" type="button">Generate another update</button>
+          <p class="fine" style="margin:1.4rem 0 0">Actual work completed by this button: one additional paragraph. Authoritative repository mutations: zero.</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="footer-inner wrap">
+      <div><strong>CAPTAIN OBVIOUS</strong><br>Making the obvious falsifiable since approximately now.</div>
+      <div>Independent parody. Not affiliated with Anthropic or Claude.<br><a href="https://github.com/QSOLKCB/CLAUDE-SKILLS-CAPTAIN-OBVIOUS">View the actual code</a> · No hidden uploads.</div>
+    </div>
+  </footer>
+
+  <script>
+    "use strict";
+    (function () {
+      const form = document.getElementById("receipt-form");
+      const output = document.getElementById("receipt-output");
+      const maxFileBytes = 16 * 1024 * 1024;
+
+      form.addEventListener("submit", async function (event) {
+        event.preventDefault();
+        const file = document.getElementById("evidence").files[0];
+        const claim = document.getElementById("claim").value.trim();
+        if (!file || !claim) {
+          output.textContent = "FAIL: A claim and an actual file are both required. Bold assertions alone are not an input format.";
+          return;
+        }
+        if (file.size > maxFileBytes) {
+          output.textContent = "FAIL: File exceeds the 16 MiB browser limit. Use the local Python receipt tool for larger evidence.";
+          return;
+        }
+        if (!window.crypto || !crypto.subtle) {
+          output.textContent = "FAIL: Web Crypto unavailable. Use the HTTPS site or the offline Python tool.";
+          return;
+        }
+        output.textContent = "READING: Actual bytes have entered the investigation.";
+        try {
+          const content = await file.arrayBuffer();
+          const hash = await crypto.subtle.digest("SHA-256", content);
+          const hex = Array.from(new Uint8Array(hash), function (byte) {
+            return byte.toString(16).padStart(2, "0");
+          }).join("");
+          const receipt = {
+            check: "browser-evidence-receipt",
+            status: "RECORDED_NOT_VERIFIED",
+            claim: claim,
+            evidence: { name: file.name, bytes: file.size, sha256: hex },
+            note: "File hashed locally. Byte identity is not proof of the claim."
+          };
+          output.textContent = JSON.stringify(receipt, null, 2);
+        } catch (error) {
+          output.textContent = "FAIL: Could not read or hash the file. " +
+            (error instanceof Error ? error.message : "Unknown local error.");
+        }
+      });
+
+      const lines = [
+        "I have reviewed the task. It appears to be a task. I will now proceed with task-related activities.",
+        "The repository contains files. I have confirmed that they are, in fact, files.",
+        "The test suite will be tested to determine whether tests can be tested by testing.",
+        "The previous status update is complete. The completion has been acknowledged by this status update.",
+        "The baseline was captured before the change, which is generally when a baseline should be captured.",
+        "I have found a difference. This is different from finding no difference. Further differences may follow.",
+        "The hash identifies the file. The hash does not have opinions about whether the file is good.",
+        "I have been instructed not to merge. I will demonstrate restraint by not merging.",
+        "The CI check that did not run has neither passed nor failed. It has, with remarkable consistency, not run."
+      ];
+      let count = 0;
+      const announcement = document.getElementById("announcement");
+      document.getElementById("more-updates").addEventListener("click", function () {
+        count += 1;
+        announcement.textContent = "Update #" + String(count).padStart(3, "0") + ": " +
+          lines[(count - 1) % lines.length];
+      });
+    }());
+  </script>
+</body>
 </html>

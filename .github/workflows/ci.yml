@@ -1,0 +1,21 @@
+name: Validate actual skills
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify Python stdlib utility and documentation
+        run: python3 -m unittest discover -s tests -v
+      - name: Verify the tools do not need a dependency installation
+        run: python3 tools/obvious.py --help

@@ -1,5 +1,7 @@
 """Offline contract tests for Captain Obvious' inconveniently real utilities."""
 import hashlib
+import html
+import re
 import json
 from pathlib import Path
 import subprocess
@@ -125,6 +127,63 @@ class CaptainObviousTests(unittest.TestCase):
         result = self.call("pin", "write", "--root", self.root,
                            "--manifest", manifest, "snapshot.txt")
         self.assertEqual(result.returncode, 2)
+
+    def test_site_command_examples_survive_copy_and_paste(self):
+        """Run exact visible command blocks in a shell with a no-side-effect python3 stub."""
+        site = (ROOT / "index.html").read_text(encoding="utf-8")
+        commands = re.findall(
+            r'<pre aria-label="(?:Repository check command|Evidence receipt command|File parity command)">'
+            r'(.*?)</pre>', site, re.DOTALL,
+        )
+        self.assertEqual(len(commands), 3)
+        examples = [
+            [
+                ["tools/obvious.py", "repo", "--path", ".",
+                 "--expected", "QSOLKCB/CLAUDE-SKILLS-CAPTAIN-OBVIOUS"],
+            ],
+            [
+                ["tools/obvious.py", "receipt", "--claim", "README exists",
+                 "--evidence", "README.md"],
+            ],
+            [
+                ["tools/obvious.py", "pin", "write", "--root", ".",
+                 "--manifest", "/tmp/captain-pins.json", "README.md"],
+                ["tools/obvious.py", "pin", "verify", "--root", ".",
+                 "--manifest", "/tmp/captain-pins.json"],
+            ],
+        ]
+        for example, expected in zip(commands, examples):
+            script = (
+                'python3() { printf "CALL\n"; printf "ARG:%s\n" "$@"; }\n'
+                + html.unescape(example)
+            )
+            result = subprocess.run(
+                ["sh", "-c", script], text=True, capture_output=True, timeout=5,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            calls = [
+                [line.removeprefix("ARG:") for line in chunk.splitlines() if line]
+                for chunk in result.stdout.split("CALL\n") if chunk
+            ]
+            self.assertEqual(calls, expected)
+
+    def test_browser_hash_results_are_guarded_after_async_boundaries(self):
+        """Older reads, digests and errors must not replace newer submit results."""
+        site = (ROOT / "index.html").read_text(encoding="utf-8")
+        self.assertIn("const submissionId = ++latestSubmission;", site)
+        self.assertRegex(
+            site,
+            r'await file\.arrayBuffer\(\);\s*'
+            r'if \(submissionId !== latestSubmission\) return;\s*'
+            r'const hash = await crypto\.subtle\.digest\("SHA-256", content\);\s*'
+            r'if \(submissionId !== latestSubmission\) return;',
+        )
+        self.assertRegex(
+            site,
+            r'catch \(error\) \{\s*'
+            r'if \(submissionId !== latestSubmission\) return;',
+        )
 
     def test_site_is_standalone_and_docs_are_real(self):
         site = (ROOT / "index.html").read_text(encoding="utf-8")

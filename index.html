@@ -304,27 +304,30 @@
           <span class="number">SKILL 001 // WRONG REPO DETECTOR</span>
           <h3>Am I even in the right repository?</h3>
           <p>Checks the actual GitHub origin and, optionally, whether your worktree is dirty. Prevents a twelve-point architecture review of somebody else's project.</p>
-          <pre aria-label="Repository check command">python3 tools/obvious.py repo
-  --path .
-  --expected OWNER/REPO</pre>
+          <pre aria-label="Repository check command">python3 tools/obvious.py repo \
+  --path . \
+  --expected QSOLKCB/CLAUDE-SKILLS-CAPTAIN-OBVIOUS</pre>
           <a href="https://github.com/QSOLKCB/CLAUDE-SKILLS-CAPTAIN-OBVIOUS/blob/main/.claude/skills/wrong-repository-preflight/SKILL.md">Read the skill and its failure conditions ↗</a>
         </article>
         <article class="skill">
           <span class="number">SKILL 002 // RECEIPT DEPARTMENT</span>
           <h3>That's a lovely claim. Got a file?</h3>
           <p>Hashes existing evidence files and prints a machine-readable receipt. A SHA-256 digest proves which bytes you had, not whether those bytes were telling the truth.</p>
-          <pre aria-label="Evidence receipt command">python3 tools/obvious.py receipt
-  --claim "Tests passed"
-  --evidence report.json</pre>
+          <pre aria-label="Evidence receipt command">python3 tools/obvious.py receipt \
+  --claim "README exists" \
+  --evidence README.md</pre>
           <a href="https://github.com/QSOLKCB/CLAUDE-SKILLS-CAPTAIN-OBVIOUS/blob/main/.claude/skills/receipts-or-it-didnt-happen/SKILL.md">Read the skill and its inconvenient caveats ↗</a>
         </article>
         <article class="skill">
           <span class="number">SKILL 003 // TICK POLICE</span>
           <h3>Pixels may move. State may not.</h3>
           <p>Pins deterministic snapshot files before visual refactors and verifies byte parity afterwards. Does not confuse "it still looks cool" with a simulation test.</p>
-          <pre aria-label="File parity command">python3 tools/obvious.py pin
-  verify --root .
-  --manifest pins.json</pre>
+          <pre aria-label="File parity command">python3 tools/obvious.py pin write \
+  --root . \
+  --manifest /tmp/captain-pins.json README.md
+python3 tools/obvious.py pin verify \
+  --root . \
+  --manifest /tmp/captain-pins.json</pre>
           <a href="https://github.com/QSOLKCB/CLAUDE-SKILLS-CAPTAIN-OBVIOUS/blob/main/.claude/skills/no-ghosts-in-the-tick/SKILL.md">Read the skill and actually test your ticks ↗</a>
         </article>
       </div>
@@ -419,9 +422,12 @@ No bytes were harmed in the preparation of this announcement.</pre>
       const form = document.getElementById("receipt-form");
       const output = document.getElementById("receipt-output");
       const maxFileBytes = 16 * 1024 * 1024;
+      let latestSubmission = 0;
 
       form.addEventListener("submit", async function (event) {
         event.preventDefault();
+        // Every attempt invalidates previous work, including rejected submissions.
+        const submissionId = ++latestSubmission;
         const file = document.getElementById("evidence").files[0];
         const claim = document.getElementById("claim").value.trim();
         if (!file || !claim) {
@@ -439,7 +445,9 @@ No bytes were harmed in the preparation of this announcement.</pre>
         output.textContent = "READING: Actual bytes have entered the investigation.";
         try {
           const content = await file.arrayBuffer();
+          if (submissionId !== latestSubmission) return;
           const hash = await crypto.subtle.digest("SHA-256", content);
+          if (submissionId !== latestSubmission) return;
           const hex = Array.from(new Uint8Array(hash), function (byte) {
             return byte.toString(16).padStart(2, "0");
           }).join("");
@@ -452,6 +460,7 @@ No bytes were harmed in the preparation of this announcement.</pre>
           };
           output.textContent = JSON.stringify(receipt, null, 2);
         } catch (error) {
+          if (submissionId !== latestSubmission) return;
           output.textContent = "FAIL: Could not read or hash the file. " +
             (error instanceof Error ? error.message : "Unknown local error.");
         }

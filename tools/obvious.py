@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 import re
+import stat
 import subprocess
 import sys
 import tempfile
@@ -17,12 +18,29 @@ DIGEST = re.compile(r"[0-9a-f]{64}\Z")
 REPO = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\Z")
 
 
-def sha256_file(path: Path) -> str:
+def sha256_stream(source) -> str:
     digest = hashlib.sha256()
-    with path.open("rb") as source:
-        for chunk in iter(lambda: source.read(1024 * 1024), b""):
-            digest.update(chunk)
+    for chunk in iter(lambda: source.read(1024 * 1024), b""):
+        digest.update(chunk)
     return digest.hexdigest()
+
+
+def sha256_file(path: Path) -> str:
+    with path.open("rb") as source:
+        return sha256_stream(source)
+
+
+def reject_symlink_components(path: Path, label: str) -> None:
+    """Fail closed if an explicit path component is a symlink."""
+    absolute = path.absolute()
+    if any(component.is_symlink() for component in (absolute, *absolute.parents)):
+        raise ValueError(f"symlinks are not accepted in {label} path: {str(path)!r}")
+
+
+def canonical_manifest(raw: str) -> Path:
+    path = Path(raw).absolute()
+    reject_symlink_components(path, "manifest")
+    return path.resolve(strict=False)
 
 
 def report(data: dict) -> None:
@@ -91,13 +109,13 @@ def write_pin(args: argparse.Namespace) -> None:
     root = Path(args.root).resolve(strict=True)
     if not root.is_dir():
         raise ValueError("root must be a directory")
-    manifest = Path(args.manifest).absolute()
-    if manifest.is_symlink():
-        raise ValueError("manifest must not be a symlink")
+    manifest = canonical_manifest(args.manifest)
     files = {}
     for raw in args.files:
         name, target = safe_relative_file(root, raw)
-        if target.resolve() == manifest:
+        if target.resolve(strict=True) == manifest or (
+            manifest.exists() and os.path.samefile(target, manifest)
+        ):
             raise ValueError("cannot pin a manifest to itself")
         if name in files:
             raise ValueError(f"duplicate pin path: {name}")
@@ -123,9 +141,7 @@ def write_pin(args: argparse.Namespace) -> None:
 
 def verify_pin(args: argparse.Namespace) -> None:
     root = Path(args.root).resolve(strict=True)
-    manifest = Path(args.manifest)
-    if manifest.is_symlink():
-        raise ValueError("manifest must not be a symlink")
+    manifest = canonical_manifest(args.manifest)
     record = json.loads(manifest.read_text(encoding="utf-8"))
     if not isinstance(record, dict) or set(record) != {"schema", "algorithm", "files"}:
         raise ValueError("unsupported manifest structure")
@@ -154,17 +170,28 @@ def verify_pin(args: argparse.Namespace) -> None:
 
 def receipt(args: argparse.Namespace) -> None:
     results = []
-    seen = set()
+    seen_paths = set()
+    seen_inodes = set()
     for raw in args.evidence:
         path = Path(raw)
-        if path.is_symlink() or not path.is_file():
+        reject_symlink_components(path, "evidence")
+        if not path.is_file():
             raise ValueError(f"not a regular non-symlink file: {raw!r}")
-        resolved = path.resolve(strict=True)
-        if resolved in seen:
-            raise ValueError(f"duplicate evidence file: {raw}")
-        seen.add(resolved)
-        results.append({"path": str(path), "bytes": path.stat().st_size,
-                        "sha256": sha256_file(path)})
+        with path.open("rb") as source:
+            metadata = os.fstat(source.fileno())
+            if not stat.S_ISREG(metadata.st_mode):
+                raise ValueError(f"not a regular evidence file: {raw!r}")
+            resolved = path.resolve(strict=True)
+            identity = (metadata.st_dev, metadata.st_ino)
+            if resolved in seen_paths or (
+                metadata.st_ino and identity in seen_inodes
+            ):
+                raise ValueError(f"duplicate evidence file: {raw}")
+            seen_paths.add(resolved)
+            if metadata.st_ino:
+                seen_inodes.add(identity)
+            results.append({"path": str(path), "bytes": metadata.st_size,
+                            "sha256": sha256_stream(source)})
     report({
         "check": "evidence-receipt", "status": "RECORDED_NOT_VERIFIED",
         "claim": args.claim, "evidence": sorted(results, key=lambda row: row["path"]),

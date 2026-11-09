@@ -28,6 +28,17 @@ Requires Python 3.10+ and Git for the repository guard. No Python packages need 
 
 To make the skills discoverable in **another** Claude Code project, copy the desired skill directory into that project's .claude/skills/ and copy tools/obvious.py into its tools/ directory. Command examples in the skill files assume this layout.
 
+## Claude Code CLI discovery (CO-LIVE-001)
+
+Project skills are discovered at **session start**. Run Claude Code from this checkout's root, not from your home directory or an existing unrelated session:
+
+    cd /path/to/CLAUDE-SKILLS-CAPTAIN-OBVIOUS
+    claude
+
+Confirm the three skills appear in Claude Code's available skills. Opening the repository after starting a session elsewhere, or manually reading a SKILL.md file, does **not** establish that Claude Code loaded and invoked its skill machinery. If you cloned after launching Claude Code, exit and start a new session inside the clone.
+
+The CO-LIVE-001 CLI run manually followed all three skill procedures and reported 17/17 existing tests passing, then identified symlink-alias and hardlink-identity gaps. The new regression cases exercise those gaps directly. Python's bytecode cache is gitignored, so a test run does not leave a false dirty-worktree warning from __pycache__.
+
 ## How to interpret the evidence
 
 The three utilities intentionally separate **observed** facts from **inferred** claims. A PASS on origin identity means the remote matches the expected slug. A SHA-256 receipt identifies bytes; it cannot certify semantic correctness. A parity manifest compares bytes; it does not prove a tick rate.

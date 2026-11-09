@@ -29,7 +29,7 @@ description: Record and verify SHA-256 file baselines during visual-only game ch
 
 ## Utility contract
 - Writes a sorted JSON manifest with schema version and SHA-256 digests.
-- Refuses traversal, absolute paths, symlinked inputs, duplicates and manifest self-inclusion.
+- Refuses traversal, absolute input paths, symlinked inputs or manifest path components, duplicate paths and manifest self-inclusion (including hard-linked aliases of an existing manifest).
 - Replaces the manifest atomically on the same filesystem.
 - Fails verification on changed bytes or malformed manifests.
 - Does not measure frame rate, inspect render purity, or guarantee snapshots were properly generated.

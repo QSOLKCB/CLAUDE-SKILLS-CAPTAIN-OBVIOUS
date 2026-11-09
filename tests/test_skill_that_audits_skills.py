@@ -160,6 +160,35 @@ class SkillAuditTests(unittest.TestCase):
         self.assertEqual(self.skill(data, "helpful-helper")["referenced_executables"],
                          [".claude/skills/helpful-helper/scripts/run.py"])
 
+    def test_interpreter_argument_with_dot_slash_does_not_need_execute_bit(self):
+        """Review on PR #5: python3 ./script.py runs without the script's execute bit."""
+        self.add("helpful-helper", skill_text(
+            body=GOOD_BODY.replace("tools/helper.py", "./tools/helper.py")))
+        code, data = self.audit()
+        self.assertEqual(code, 0, data)
+        self.assertEqual(self.skill(data, "helpful-helper")["referenced_executables"],
+                         ["tools/helper.py"])
+
+    def test_direct_dot_slash_invocation_still_needs_execute_bit(self):
+        (self.root / "tools" / "run.sh").write_text("echo hi\n", encoding="utf-8")
+        self.add("helpful-helper", skill_text(
+            body=GOOD_BODY.replace("python3 tools/helper.py", "./tools/run.sh")))
+        self.assertIn("NOT_EXECUTABLE", self.codes(self.audit()[1], "helpful-helper"))
+
+    def test_symlink_component_before_dotdot_is_not_collapsed_away(self):
+        """Review on PR #5: tools/link/../helper.py must not be validated as tools/helper.py."""
+        outside = self.root.parent / (self.root.name + "-outside") / "child"
+        outside.mkdir(parents=True)
+        self.addCleanup(lambda: __import__("shutil").rmtree(outside.parent))
+        (outside.parent / "helper.py").write_text("print('elsewhere')\n", encoding="utf-8")
+        (self.root / "tools" / "link").symlink_to(outside, target_is_directory=True)
+        self.add("helpful-helper", skill_text(
+            body=GOOD_BODY.replace("tools/helper.py", "tools/link/../helper.py")))
+        code, data = self.audit()
+        self.assertEqual(code, 1, data)
+        self.assertIn("UNSAFE_REFERENCE", self.codes(data, "helpful-helper"))
+        self.assertEqual(self.skill(data, "helpful-helper")["referenced_executables"], [])
+
     def test_directory_without_skill_md_is_malformed(self):
         (self.skills / "empty-shell").mkdir()
         (self.skills / "empty-shell" / "README.md").write_text("hi\n", encoding="utf-8")

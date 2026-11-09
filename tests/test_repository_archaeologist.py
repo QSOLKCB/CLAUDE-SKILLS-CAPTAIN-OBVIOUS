@@ -166,6 +166,18 @@ class RepositoryArchaeologistTests(unittest.TestCase):
         self.assertEqual(before, after)
         self.assertEqual(config, (repo / ".git" / "config").read_bytes())
 
+    def test_overlapping_root_cannot_reduce_another_roots_depth_allowance(self):
+        """Review on PR #5: adding a broader root must not hide a discoverable checkout."""
+        repo = self.checkout("a/b", f"https://github.com/{TARGET}.git")
+        narrow = self.call("find-repo", "--expected", TARGET, "--search", self.search / "a",
+                           "--max-depth", "1")
+        self.assertEqual(narrow.returncode, 0, narrow.stdout)
+        both = self.call("find-repo", "--expected", TARGET, "--search", self.search / "a",
+                         "--search", self.search, "--max-depth", "1")
+        self.assertEqual(both.returncode, 0, both.stdout)
+        data = json.loads(both.stdout)
+        self.assertEqual((data["status"], data["matches"]), ("MATCH", [str(repo)]))
+
     def test_skill_document_exists_and_uses_the_cli(self):
         doc = ROOT / ".claude" / "skills" / "repository-archaeologist" / "SKILL.md"
         text = doc.read_text(encoding="utf-8")

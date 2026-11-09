@@ -170,6 +170,29 @@ class AliasOfBetrayalTests(unittest.TestCase):
         malformed = self.restore("--overwrite", "--expected-sha256", "abc")
         self.assertEqual(malformed.returncode, 2)
 
+    def test_explicitly_empty_expected_digest_is_rejected(self):
+        """Review on PR #5: an unset "$PRISTINE_SHA256" must not disable verification."""
+        self.dest.write_bytes(MUTATED)
+        result = self.restore("--overwrite", "--expected-sha256", "")
+        self.assert_refused(result, "--expected-sha256")
+        self.assertEqual(self.dest.read_bytes(), MUTATED)
+
+    def test_backslash_bypasses_aliases_but_only_command_bypasses_functions(self):
+        """Review on PR #5: the documented bypass must work for shell functions too."""
+        bash = shutil.which("bash")
+        if not bash:
+            self.skipTest("bash is required")
+        script = 'cp() { :; }\n\\cp "$1" "$2"\ncmp -s "$1" "$2" && echo BACKSLASH_COPIED\n' \
+                 'command cp "$1" "$2"\ncmp -s "$1" "$2" && echo COMMAND_COPIED\n'
+        result = subprocess.run([bash, "--noprofile", "--norc", "-c", script, "bash",
+                                 str(self.source), str(self.dest)],
+                                text=True, capture_output=True, timeout=10, check=False)
+        self.assertNotIn("BACKSLASH_COPIED", result.stdout)
+        self.assertIn("COMMAND_COPIED", result.stdout)
+        text = (ROOT / ".claude" / "skills" / "alias-of-betrayal" / "SKILL.md").read_text(
+            encoding="utf-8")
+        self.assertIn("`\\cp` bypasses aliases only", text)
+
     def test_file_mode_is_copied(self):
         os.chmod(self.source, 0o640)
         self.assertEqual(self.restore().returncode, 0)

@@ -424,6 +424,224 @@ def restore_file(args: argparse.Namespace) -> None:
     })
 
 
+SKILL_NAME = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*\Z")
+FRONT_KEY = re.compile(r"([A-Za-z][A-Za-z0-9_-]*):(?:[ \t]+(.*))?\Z")
+INTERPRETER_REF = re.compile(
+    r"(?<![\w./-])(?:python3?|bash|sh|zsh|node|ruby|perl)"
+    r"(?:[ \t]+-[A-Za-z][^\s]*)*[ \t]+([^\s`\"'|;&<>()]+)")
+DOT_SLASH_REF = re.compile(r"(?<![\w./-])(\./[\w./-]+\.(?:py|sh|bash|pl|rb|js))\b")
+SCRIPT_SUFFIXES = (".py", ".sh", ".bash", ".pl", ".rb", ".js")
+PLACEHOLDER = re.compile(r"\b(?:TODO|TBD|FIXME)\b|lorem ipsum", re.IGNORECASE)
+LOADING_NOTE = (
+    "DISCOVERABLE_ON_DISK means a SKILL.md with parsable frontmatter exists where Claude Code "
+    "looks for project skills. ACTUALLY_LOADED_BY_CLAUDE cannot be observed by a static file "
+    "audit: confirm it inside a Claude Code session started at the repository root, for "
+    "example by seeing the skill listed or invoking it as /<name>."
+)
+
+
+def parse_frontmatter(text: str) -> tuple[dict, str, list]:
+    """Parse a deliberately small subset: single-line `key: value` scalars only."""
+    findings = []
+    lines = text.lstrip("﻿").splitlines()
+    if not lines or lines[0].rstrip() != "---":
+        return {}, text, [("MISSING_FRONTMATTER", "SKILL.md must start with a '---' line")]
+    try:
+        end = next(i for i in range(1, len(lines)) if lines[i].rstrip() == "---")
+    except StopIteration:
+        return {}, text, [("UNTERMINATED_FRONTMATTER", "no closing '---' line")]
+    fields = {}
+    for number, line in enumerate(lines[1:end], start=2):
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        match = FRONT_KEY.fullmatch(line.rstrip())
+        if not match:
+            findings.append(("UNSUPPORTED_FRONTMATTER",
+                             f"line {number}: only single-line 'key: value' entries are supported"))
+            continue
+        key, value = match.group(1), (match.group(2) or "").strip()
+        if key in fields:
+            findings.append(("DUPLICATE_KEY", f"line {number}: duplicate key {key!r}"))
+            continue
+        if len(value) >= 2 and value[0] == value[-1] == '"' and "\\" not in value:
+            value = value[1:-1]
+        elif len(value) >= 2 and value[0] == value[-1] == "'":
+            value = value[1:-1].replace("''", "'")
+        elif (value[:1] in ('"', "'", "[", "{", "|", ">", "&", "*", "!", "%", "@", "`")
+              or ": " in value or " #" in value):
+            findings.append(("UNSUPPORTED_FRONTMATTER",
+                             f"line {number}: value of {key!r} needs YAML features this auditor does not implement"))
+            continue
+        fields[key] = value
+    return fields, "\n".join(lines[end + 1:]), findings
+
+
+def strip_code_spans(text: str) -> str:
+    return re.sub(r"`[^`\n]*`", " ", text)
+
+
+def audit_one_skill(root: Path, folder: Path, allow_instruction_only: bool) -> dict:
+    name = folder.name
+    row = {"directory": name, "path": folder.relative_to(root).as_posix(), "name": None,
+           "description": None, "frontmatter_keys": [], "referenced_executables": [],
+           "discovery": "NOT_DISCOVERABLE", "actually_loaded_by_claude": None,
+           "findings": []}
+    errors, warnings = [], []
+    def add(code, message, level="error"):
+        (errors if level == "error" else warnings).append(
+            {"code": code, "level": level, "message": message})
+    document = folder / "SKILL.md"
+    if folder.is_symlink():
+        add("SYMLINKED_SKILL", "skill directory is a symlink; this auditor does not follow it")
+    elif not document.exists() and not document.is_symlink():
+        add("MISSING_SKILL_MD", "directory has no SKILL.md, so it is not a skill")
+    elif document.is_symlink() or not document.is_file():
+        add("SYMLINKED_SKILL", "SKILL.md is not a regular non-symlink file")
+    else:
+        try:
+            text = document.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as error:
+            text = None
+            add("UNREADABLE_SKILL_MD", str(error))
+        if text is not None:
+            fields, body, parsed = parse_frontmatter(text)
+            for code, message in parsed:
+                add(code, message)
+            row["frontmatter_keys"] = sorted(fields)
+            row["name"] = fields.get("name")
+            row["description"] = fields.get("description")
+            framed = not any(code in ("MISSING_FRONTMATTER", "UNTERMINATED_FRONTMATTER")
+                             for code, _ in parsed)
+            if framed and row["name"]:
+                row["discovery"] = "DISCOVERABLE_ON_DISK"
+            if framed:
+                audit_fields(row, name, add)
+                audit_body(root, folder, body, row, add, allow_instruction_only)
+    row["findings"] = sorted(errors + warnings, key=lambda f: (f["code"], f["message"]))
+    row["status"] = "FAIL" if errors else "PASS"
+    return row
+
+
+def audit_fields(row: dict, directory: str, add) -> None:
+    name, description = row["name"], row["description"]
+    if name is None:
+        add("MISSING_NAME", "frontmatter has no 'name'")
+    elif not SKILL_NAME.fullmatch(name) or len(name) > 64:
+        add("INVALID_NAME", f"name {name!r} must be lowercase letters, digits and hyphens (max 64)")
+    if name is not None and name != directory:
+        add("NAME_MISMATCH", f"name {name!r} does not match directory {directory!r}")
+    if description is None:
+        add("MISSING_DESCRIPTION", "frontmatter has no 'description'")
+    elif not description.strip():
+        add("EMPTY_DESCRIPTION", "description is empty")
+    elif len(description.split()) < 4:
+        add("SHORT_DESCRIPTION", "description is too short to tell Claude when to use the skill")
+    elif len(description) > 1024:
+        add("DESCRIPTION_TOO_LONG", "description exceeds 1024 characters")
+
+
+def audit_body(root: Path, folder: Path, body: str, row: dict, add,
+               allow_instruction_only: bool) -> None:
+    prose = re.sub(r"[#*_>`\-]", " ", body)
+    words = len(prose.split())
+    steps = len(re.findall(r"(?m)^[ \t]*\d+[.)][ \t]+\S", body))
+    if words <= 12 and steps == 0:
+        add("PLATITUDE_ONLY", f"the entire body is {words} word(s) of encouragement")
+    if steps < 2 or words < 60:
+        add("INSUFFICIENT_PROCEDURE",
+            f"needs at least 2 numbered steps and 60 words; found {steps} step(s), {words} word(s)")
+    if PLACEHOLDER.search(strip_code_spans(body)):
+        add("PLACEHOLDER_TEXT", "body contains placeholder text such as TODO, TBD or FIXME")
+    references = set(INTERPRETER_REF.findall(body)) | set(DOT_SLASH_REF.findall(body))
+    found = set()
+    for raw in sorted(references):
+        skill_relative = raw.startswith("${CLAUDE_SKILL_DIR}/")
+        if not ("/" in raw or raw.endswith(SCRIPT_SUFFIXES)):
+            continue  # e.g. `python3 -m unittest` or prose such as "python3 is required"
+        if raw.startswith("$") and not skill_relative:
+            add("UNRESOLVED_REFERENCE", f"{raw} depends on a variable this auditor does not expand",
+                level="warning")
+            continue
+        if skill_relative:
+            candidates = [folder / raw[len("${CLAUDE_SKILL_DIR}/"):]]
+        elif raw.startswith(("/", "~")):
+            add("EXTERNAL_REFERENCE", f"{raw} is outside the repository and was not checked",
+                level="warning")
+            continue
+        else:
+            candidates = [root / raw, folder / raw]
+        resolved = None
+        for candidate in candidates:
+            target = Path(os.path.normpath(candidate))
+            if not target.is_relative_to(root):
+                add("UNSAFE_REFERENCE", f"{raw} resolves outside the repository")
+                resolved = False
+                break
+            if os.path.lexists(target):
+                resolved = target
+                break
+        if resolved is False:
+            continue
+        if resolved is None:
+            add("MISSING_UTILITY", f"referenced executable {raw} does not exist")
+            continue
+        relative = resolved.relative_to(root)
+        if any((root / Path(*relative.parts[:size])).is_symlink()
+               for size in range(1, len(relative.parts) + 1)):
+            add("UNSAFE_REFERENCE", f"{raw} passes through a symlink")
+            continue
+        if not resolved.is_file():
+            add("MISSING_UTILITY", f"referenced executable {raw} is not a regular file")
+            continue
+        if raw.startswith("./") and not os.access(resolved, os.X_OK):
+            add("NOT_EXECUTABLE", f"{raw} is invoked directly but is not executable")
+        found.add(relative.as_posix())
+    row["referenced_executables"] = sorted(found)
+    if not found:
+        add("NO_LOCAL_EXECUTABLE",
+            "no existing local script is referenced; the skill is instructions only",
+            level="warning" if allow_instruction_only else "error")
+
+
+def audit_skills(args: argparse.Namespace) -> int:
+    """Static audit only: reads files, never executes Markdown or embedded commands."""
+    root = Path(args.root).resolve(strict=True)
+    if not root.is_dir():
+        raise ValueError("--root must be a directory")
+    skills_dir = root / ".claude" / "skills"
+    findings, skills = [], []
+    if skills_dir.is_symlink() or (root / ".claude").is_symlink():
+        findings.append({"code": "SKILLS_DIR_SYMLINK", "level": "error",
+                         "message": ".claude/skills is reached through a symlink; not followed"})
+    elif not skills_dir.is_dir():
+        findings.append({"code": "SKILLS_DIR_MISSING", "level": "error",
+                         "message": ".claude/skills does not exist"})
+    else:
+        for entry in sorted(skills_dir.iterdir(), key=lambda p: p.name):
+            if entry.is_dir() or entry.is_symlink():
+                skills.append(audit_one_skill(root, entry, args.allow_instruction_only))
+            else:
+                findings.append({"code": "STRAY_FILE", "level": "warning",
+                                 "message": f"{entry.name} is a file, not a skill directory"})
+        if not skills:
+            findings.append({"code": "NO_SKILLS", "level": "error",
+                             "message": ".claude/skills contains no skill directories"})
+    failed = any(f["level"] == "error" for f in findings) or any(
+        s["status"] == "FAIL" for s in skills)
+    report({
+        "check": "skill-audit", "status": "FAIL" if failed else "PASS",
+        "skills_dir": ".claude/skills", "findings": findings, "skills": skills,
+        "summary": {"skills": len(skills),
+                    "pass": sum(s["status"] == "PASS" for s in skills),
+                    "fail": sum(s["status"] == "FAIL" for s in skills),
+                    "discoverable_on_disk": sum(s["discovery"] == "DISCOVERABLE_ON_DISK"
+                                                for s in skills)},
+        "claude_loading": LOADING_NOTE, "commands_executed": 0,
+        "note": "Static analysis of SKILL.md text and referenced paths. Nothing was executed.",
+    })
+    return 1 if failed else 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Captain Obvious performs actual checks.")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -463,6 +681,12 @@ def main() -> int:
                          help="explicitly authorise replacing an existing destination")
     restore.add_argument("--expected-sha256")
     restore.set_defaults(run=restore_file)
+    audit = commands.add_parser(
+        "audit-skills", help="statically audit .claude/skills without executing anything")
+    audit.add_argument("--root", default=".")
+    audit.add_argument("--allow-instruction-only", action="store_true",
+                       help="downgrade 'no local executable referenced' to a warning")
+    audit.set_defaults(run=audit_skills)
     args = parser.parse_args()
     try:
         # Commands return 1 for a reported negative outcome (JSON on stdout).

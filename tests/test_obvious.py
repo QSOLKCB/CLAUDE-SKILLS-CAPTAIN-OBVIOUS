@@ -116,6 +116,69 @@ class CaptainObviousTests(unittest.TestCase):
         self.assertEqual(result.returncode, 2)
         self.assertIn("duplicate", result.stderr)
 
+    def test_pin_rejects_manifest_through_symlinked_parent(self):
+        """A manifest reached through an alias must not replace a pinned input."""
+        original = self.root / "snapshot.txt"
+        before = original.read_bytes()
+        alias = self.root / "alias"
+        alias.symlink_to(self.root, target_is_directory=True)
+        result = self.call("pin", "write", "--root", self.root,
+                           "--manifest", alias / "snapshot.txt", "snapshot.txt")
+        self.assertEqual(result.returncode, 2, result.stdout)
+        self.assertIn("symlink", result.stderr.lower())
+        self.assertEqual(original.read_bytes(), before)
+
+    def test_pin_rejects_verification_through_symlinked_parent(self):
+        manifest = self.root / "pins.json"
+        self.assertEqual(self.call("pin", "write", "--root", self.root,
+                                   "--manifest", manifest, "snapshot.txt").returncode, 0)
+        alias = self.root / "alias"
+        alias.symlink_to(self.root, target_is_directory=True)
+        result = self.call("pin", "verify", "--root", self.root,
+                           "--manifest", alias / "pins.json")
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("symlink", result.stderr.lower())
+
+    def test_pin_rejects_existing_hardlinked_manifest(self):
+        """Even a different pathname must not identify the pinned file itself."""
+        original = self.root / "snapshot.txt"
+        manifest = self.root / "hardlink-to-snapshot"
+        manifest.hardlink_to(original)
+        before = original.read_bytes()
+        result = self.call("pin", "write", "--root", self.root,
+                           "--manifest", manifest, "snapshot.txt")
+        self.assertEqual(result.returncode, 2, result.stdout)
+        self.assertIn("itself", result.stderr)
+        self.assertEqual(original.read_bytes(), before)
+
+    def test_receipt_rejects_symlinked_parent_directory(self):
+        alias = self.root / "alias"
+        alias.symlink_to(self.root, target_is_directory=True)
+        result = self.call("receipt", "--claim", "looks fine",
+                           "--evidence", alias / "snapshot.txt")
+        self.assertEqual(result.returncode, 2, result.stdout)
+        self.assertIn("symlink", result.stderr.lower())
+
+    def test_receipt_rejects_hardlinked_duplicate_file(self):
+        original = self.root / "snapshot.txt"
+        duplicate = self.root / "hardlink.txt"
+        duplicate.hardlink_to(original)
+        result = self.call("receipt", "--claim", "two pieces of evidence",
+                           "--evidence", original, duplicate)
+        self.assertEqual(result.returncode, 2, result.stdout)
+        self.assertIn("duplicate evidence file", result.stderr)
+
+    def test_receipt_accepts_distinct_files_with_identical_bytes(self):
+        original = self.root / "snapshot.txt"
+        duplicate_content = self.root / "independent-copy.txt"
+        duplicate_content.write_bytes(original.read_bytes())
+        result = self.call("receipt", "--claim", "same bytes, different files",
+                           "--evidence", original, duplicate_content)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        evidence = json.loads(result.stdout)["evidence"]
+        self.assertEqual(len(evidence), 2)
+        self.assertEqual(evidence[0]["sha256"], evidence[1]["sha256"])
+
     def test_pin_rejects_corrupt_manifest(self):
         manifest = self.root / "manifest.json"
         manifest.write_text('{"schema": 1, "algorithm": "sha256", "files": []}')

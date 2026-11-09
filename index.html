@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#171a17">
-  <meta name="description" content="Captain Obvious: three executable Claude Code skills, zero imaginary green ticks, and more status updates than anyone ordered.">
+  <meta name="description" content="Captain Obvious: six executable Claude Code skills, including skills for finding our skills, zero imaginary green ticks, and more status updates than anyone ordered.">
   <title>Captain Obvious — Finally, a status update that does something</title>
   <style>
     :root {
@@ -159,6 +159,7 @@
     .skill .number { color: var(--red); font: 800 .75rem/1.4 ui-monospace, monospace; }
     .skill h3 { font-size: 1.7rem; line-height: 1.07; letter-spacing: -.04em; margin: 0; }
     .skill p { color: var(--subtle); margin: 0; }
+    .skill p code { color: var(--acid); font: .88em/1 ui-monospace, monospace; }
     .skill pre {
       overflow-x: auto;
       white-space: pre-wrap;
@@ -270,7 +271,7 @@
   <main>
     <div class="hero wrap">
       <div>
-        <p class="kicker">Release candidate: Department of Unnecessary Announcements</p>
+        <p class="kicker">v0.3.0: We have developed skills for finding our skills</p>
         <h1>LESS<br>TALK.<br><em>MORE</em><br>OBVIOUS.</h1>
         <p class="intro">You asked an AI to build something. It announced it was going to <strong>look at the files.</strong> Then it announced that it <strong>looked at the files.</strong> We gave the announcement a Python script. It's now legally classified as a skill.</p>
         <div class="actions">
@@ -287,7 +288,7 @@
 
     <div class="metrics" aria-label="Project features">
       <div class="metrics-inner wrap">
-        <div class="metric"><strong>03</strong><span>Executable skills</span></div>
+        <div class="metric"><strong>06</strong><span>Executable skills</span></div>
         <div class="metric"><strong>00</strong><span>Runtime packages</span></div>
         <div class="metric"><strong>∞</strong><span>Available status updates</span></div>
       </div>
@@ -297,7 +298,7 @@
       <div class="section-head">
         <p class="mini">01 / An unexpected outbreak of competence</p>
         <h2 id="skills-heading">The skills are real.<br>We apologise.</h2>
-        <p>No single-sentence Markdown files pretending to be engineering. Each skill has a procedure, a real Python implementation and an offline test contract. It turns out doing the thing is more persuasive than announcing you're about to do the thing.</p>
+        <p>No single-sentence Markdown files pretending to be engineering. Each skill has a procedure, a real Python implementation and an offline test contract. It turns out doing the thing is more persuasive than announcing you're about to do the thing. Skill 006 now checks the other five, and itself, for exactly that.</p>
       </div>
       <div class="skill-grid">
         <article class="skill">
@@ -329,6 +330,31 @@ python3 tools/obvious.py pin verify \
   --root . \
   --manifest /tmp/captain-pins.json</pre>
           <a href="https://github.com/QSOLKCB/CLAUDE-SKILLS-CAPTAIN-OBVIOUS/blob/main/.claude/skills/no-ghosts-in-the-tick/SKILL.md">Read the skill and actually test your ticks ↗</a>
+        </article>
+        <article class="skill">
+          <span class="number">SKILL 004 // REPOSITORY ARCHAEOLOGY</span>
+          <h3>It isn't missing. You never cloned it.</h3>
+          <p>Searches only the local directories you authorise, without following directory symlinks or touching the network. Reports MATCH, NOT_FOUND, WRONG_REMOTE or AMBIGUOUS, and then stops before cloning anything.</p>
+          <pre aria-label="Repository search command">python3 tools/obvious.py find-repo \
+  --expected QSOLKCB/CLAUDE-SKILLS-CAPTAIN-OBVIOUS \
+  --search .. --max-depth 2</pre>
+          <a href="https://github.com/QSOLKCB/CLAUDE-SKILLS-CAPTAIN-OBVIOUS/blob/main/.claude/skills/repository-archaeologist/SKILL.md">Read the skill before you dig ↗</a>
+        </article>
+        <article class="skill">
+          <span class="number">SKILL 005 // ALIAS COUNTERINTELLIGENCE</span>
+          <h3>Your cp has been compromised by politeness.</h3>
+          <p>Restores fixtures with Python, not with whatever <code>cp</code> means in today's shell. Overwrites only with explicit permission, refuses self-copies and symlinks, replaces atomically and re-hashes the result.</p>
+          <pre aria-label="Fixture restore command">python3 tools/obvious.py restore \
+  --source fixtures/original.snap \
+  --dest work/tick-0600.snap --overwrite</pre>
+          <a href="https://github.com/QSOLKCB/CLAUDE-SKILLS-CAPTAIN-OBVIOUS/blob/main/.claude/skills/alias-of-betrayal/SKILL.md">Read the skill, then type cp ↗</a>
+        </article>
+        <article class="skill">
+          <span class="number">SKILL 006 // SKILL AUDITOR</span>
+          <h3>"Be useful." is not an implementation.</h3>
+          <p>Statically checks every SKILL.md for frontmatter, a procedure and utilities that actually exist. It executes nothing, and it reports "discoverable on disk" separately from "loaded by Claude", which it cannot see.</p>
+          <pre aria-label="Skill audit command">python3 tools/obvious.py audit-skills --root .</pre>
+          <a href="https://github.com/QSOLKCB/CLAUDE-SKILLS-CAPTAIN-OBVIOUS/blob/main/.claude/skills/skill-that-audits-skills/SKILL.md">Read the skill that read the skills ↗</a>
         </article>
       </div>
     </section>
@@ -475,7 +501,11 @@ No bytes were harmed in the preparation of this announcement.</pre>
         "I have found a difference. This is different from finding no difference. Further differences may follow.",
         "The hash identifies the file. The hash does not have opinions about whether the file is good.",
         "I have been instructed not to merge. I will demonstrate restraint by not merging.",
-        "The CI check that did not run has neither passed nor failed. It has, with remarkable consistency, not run."
+        "The CI check that did not run has neither passed nor failed. It has, with remarkable consistency, not run.",
+        "I searched for the repository in every authorised directory. It was not there, because nobody had cloned it.",
+        "The file has been copied. The shell asked whether I was sure. Nobody answered. The file has not been copied.",
+        "I audited the skills. One of them said 'Be useful.' It has been reclassified as a motivational poster.",
+        "The skill is discoverable on disk. Whether Claude loaded it remains a matter for Claude."
       ];
       let count = 0;
       const announcement = document.getElementById("announcement");

@@ -91,6 +91,163 @@ def check_repo(args: argparse.Namespace) -> None:
     })
 
 
+def redact_origin(origin: str) -> str:
+    """Never echo credentials embedded in an origin URL into evidence."""
+    url = urlsplit(origin)
+    if url.scheme and "@" in url.netloc:
+        host = url.netloc.rsplit("@", 1)[1]
+        return url._replace(netloc=f"***@{host}").geturl()
+    return origin
+
+
+def read_origin(path: Path) -> str | None:
+    """Read remote.origin.url from local Git config. No fetch, no network."""
+    proc = subprocess.run(
+        ["git", "-C", str(path), "config", "--get", "remote.origin.url"],
+        text=True, capture_output=True, timeout=15, check=False,
+        env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
+    )
+    if proc.returncode == 1 and not proc.stderr.strip():
+        return None
+    if proc.returncode:
+        raise ValueError(f"git config failed: {proc.stderr.strip()}")
+    return proc.stdout.strip() or None
+
+
+def is_checkout(path: Path) -> bool:
+    try:
+        metadata = os.lstat(path / ".git")
+    except OSError:
+        return False
+    return stat.S_ISDIR(metadata.st_mode) or stat.S_ISREG(metadata.st_mode)
+
+
+def find_repo(args: argparse.Namespace) -> int:
+    expected = args.expected.removesuffix(".git")
+    if not REPO.fullmatch(expected):
+        raise ValueError("--expected must be an OWNER/REPO value")
+    if not args.search:
+        raise ValueError("at least one explicitly authorised --search directory is required")
+    if not 0 <= args.max_depth <= 32:
+        raise ValueError("--max-depth must be between 0 and 32")
+    if args.max_directories < 1:
+        raise ValueError("--max-directories must be positive")
+    roots = []
+    for raw in args.search:
+        root = Path(raw).resolve(strict=True)
+        if not root.is_dir():
+            raise ValueError(f"search root is not a directory: {raw!r}")
+        roots.append(root)
+    roots = sorted(set(roots))
+    repo_name = expected.split("/", 1)[1].lower()
+    seen_dirs, seen_checkouts = set(), set()
+    checkouts, symlinks, unreadable = [], set(), set()
+    depth_limit = truncated = False
+    scanned = 0
+    for root in roots:
+        stack = [(root, 0)]
+        while stack and not truncated:
+            directory, depth = stack.pop()
+            try:
+                metadata = os.stat(directory, follow_symlinks=False)
+            except OSError:
+                unreadable.add(str(directory))
+                continue
+            identity = (metadata.st_dev, metadata.st_ino)
+            if identity in seen_dirs:
+                continue
+            seen_dirs.add(identity)
+            if scanned >= args.max_directories:
+                truncated = True
+                break
+            scanned += 1
+            if is_checkout(directory) and identity not in seen_checkouts:
+                seen_checkouts.add(identity)
+                row = {"path": str(directory), "origin": None, "observed": None,
+                       "reason": None}
+                try:
+                    origin = read_origin(directory)
+                    if origin is None:
+                        row["reason"] = "no origin remote configured"
+                    else:
+                        row["origin"] = redact_origin(origin)
+                        row["observed"] = parse_origin(origin)
+                except (ValueError, OSError, subprocess.TimeoutExpired) as error:
+                    row["reason"] = str(error)
+                checkouts.append(row)
+            try:
+                with os.scandir(directory) as entries:
+                    children = sorted(entries, key=lambda entry: entry.name, reverse=True)
+            except OSError:
+                unreadable.add(str(directory))
+                continue
+            for entry in children:
+                if entry.name == ".git":
+                    continue
+                try:
+                    if entry.is_symlink():
+                        if entry.is_dir():
+                            symlinks.add(entry.path)
+                        continue
+                    if not entry.is_dir(follow_symlinks=False):
+                        continue
+                except OSError:
+                    unreadable.add(entry.path)
+                    continue
+                if depth + 1 > args.max_depth:
+                    depth_limit = True
+                    continue
+                stack.append((Path(entry.path), depth + 1))
+    checkouts.sort(key=lambda row: row["path"])
+    matches, wrong = [], []
+    for row in checkouts:
+        observed = row["observed"]
+        if observed and observed.lower() == expected.lower():
+            matches.append(row["path"])
+        elif (Path(row["path"]).name.lower() == repo_name or
+              (observed and observed.split("/", 1)[1].lower() == repo_name)):
+            wrong.append({"path": row["path"], "observed": observed,
+                          "origin": row["origin"], "reason": row["reason"]})
+    if len(matches) > 1:
+        status = "AMBIGUOUS"
+    elif matches:
+        status = "MATCH"
+    elif wrong:
+        status = "WRONG_REMOTE"
+    else:
+        status = "NOT_FOUND"
+    hints = {
+        "MATCH": "Run the repo check inside the matched checkout before changing anything.",
+        "AMBIGUOUS": "Several checkouts match. Ask the operator which path is intended; do not pick one.",
+        "WRONG_REMOTE": "A similarly named checkout has a different origin. Do not edit remotes without approval.",
+        "NOT_FOUND": (
+            "No checkout with this origin exists under the authorised roots. The repository "
+            "has most likely not been cloned. Only with explicit operator approval: "
+            f"git clone https://github.com/{expected}.git"
+        ),
+    }
+    caveats = []
+    if depth_limit:
+        caveats.append("depth limit reached; deeper directories were not inspected")
+    if truncated:
+        caveats.append("directory limit reached; the scan is incomplete")
+    if unreadable:
+        caveats.append("some directories could not be read")
+    report({
+        "check": "repository-archaeology", "status": status, "expected": expected,
+        "search_roots": [str(root) for root in roots], "max_depth": args.max_depth,
+        "matches": matches, "wrong_remotes": wrong, "checkouts": checkouts,
+        "checkouts_inspected": len(checkouts), "directories_scanned": scanned,
+        "depth_limit_reached": depth_limit, "truncated": truncated,
+        "symlinks_skipped": sorted(symlinks), "unreadable": sorted(unreadable),
+        "caveats": caveats, "probably_not_cloned": status == "NOT_FOUND",
+        "hint": hints[status],
+        "note": ("Read-only scan of authorised local directories. No clone, fetch or "
+                 "other network access was attempted."),
+    })
+    return 0 if status == "MATCH" else 1
+
+
 def safe_relative_file(root: Path, raw: str) -> tuple[str, Path]:
     name = Path(raw)
     if (name.is_absolute() or not name.parts or
@@ -222,13 +379,21 @@ def main() -> int:
     verify.add_argument("--root", default=".")
     verify.add_argument("--manifest", required=True)
     verify.set_defaults(run=verify_pin)
+    find = commands.add_parser(
+        "find-repo", help="locate a local checkout of OWNER/REPO without network access")
+    find.add_argument("--expected", required=True)
+    find.add_argument("--search", action="append",
+                      help="explicitly authorised directory to scan (repeatable)")
+    find.add_argument("--max-depth", type=int, default=4)
+    find.add_argument("--max-directories", type=int, default=50000)
+    find.set_defaults(run=find_repo)
     args = parser.parse_args()
     try:
-        args.run(args)
+        # Commands return 1 for a reported negative outcome (JSON on stdout).
+        return args.run(args) or 0
     except (ValueError, OSError, json.JSONDecodeError, subprocess.TimeoutExpired) as error:
         print(f"FAIL: {error}", file=sys.stderr)
         return 2
-    return 0
 
 
 if __name__ == "__main__":

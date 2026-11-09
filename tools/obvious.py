@@ -356,6 +356,74 @@ def receipt(args: argparse.Namespace) -> None:
     })
 
 
+def restore_file(args: argparse.Namespace) -> None:
+    """Copy fixture bytes with Python file operations; never through a shell alias."""
+    expected = args.expected_sha256.lower() if args.expected_sha256 else None
+    if expected is not None and not DIGEST.fullmatch(expected):
+        raise ValueError("--expected-sha256 must be 64 hexadecimal characters")
+    source, dest = Path(args.source), Path(args.dest)
+    reject_symlink_components(source, "source")
+    reject_symlink_components(dest, "destination")
+    if not source.is_file():
+        raise ValueError(f"source is not an existing regular file: {args.source!r}")
+    parent = dest.absolute().parent
+    if not parent.is_dir():
+        raise ValueError(f"destination directory does not exist: {str(parent)!r}")
+    existed = os.path.lexists(dest)
+    if existed and not dest.is_file():
+        raise ValueError(f"destination exists and is not a regular file: {args.dest!r}")
+    if existed and os.path.samefile(source, dest):
+        raise ValueError("source and destination are the same file; refusing self-copy")
+    if existed and not args.overwrite:
+        raise ValueError("destination exists; pass --overwrite to authorise replacing it")
+    previous = sha256_file(dest) if existed else None
+    with source.open("rb") as reader:
+        metadata = os.fstat(reader.fileno())
+        if not stat.S_ISREG(metadata.st_mode):
+            raise ValueError(f"source is not a regular file: {args.source!r}")
+        fd, temp = tempfile.mkstemp(prefix=".obvious-", dir=parent)
+        try:
+            digest, size = hashlib.sha256(), 0
+            with os.fdopen(fd, "wb") as writer:
+                for chunk in iter(lambda: reader.read(1024 * 1024), b""):
+                    digest.update(chunk)
+                    writer.write(chunk)
+                    size += len(chunk)
+                writer.flush()
+                os.fsync(writer.fileno())
+            os.chmod(temp, stat.S_IMODE(metadata.st_mode))
+            source_digest = digest.hexdigest()
+            if sha256_file(Path(temp)) != source_digest:
+                raise ValueError("temporary copy does not match the bytes read from source")
+            if expected is not None and source_digest != expected:
+                raise ValueError(f"source sha256 {source_digest} does not match expected {expected}")
+            if existed:
+                os.replace(temp, dest)
+            else:
+                try:
+                    # Create without clobbering: fails if the destination appeared meanwhile.
+                    os.link(temp, dest)
+                except FileExistsError:
+                    raise ValueError("destination appeared during restore; refusing to overwrite") from None
+                except OSError:
+                    if os.path.lexists(dest):
+                        raise ValueError("destination appeared during restore; refusing to overwrite") from None
+                    os.replace(temp, dest)
+        finally:
+            if os.path.lexists(temp):
+                os.unlink(temp)
+    final = sha256_file(dest)
+    if final != source_digest:
+        raise ValueError(f"destination sha256 {final} does not match source {source_digest}")
+    report({
+        "check": "fixture-restore", "status": "RESTORED_AND_VERIFIED",
+        "source": str(source), "destination": str(dest), "bytes": size,
+        "sha256": final, "expected_sha256": expected, "overwritten": existed,
+        "previous_sha256": previous,
+        "note": "Copied with Python file operations and re-hashed at the destination. No shell, alias or function was consulted.",
+    })
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Captain Obvious performs actual checks.")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -387,6 +455,14 @@ def main() -> int:
     find.add_argument("--max-depth", type=int, default=4)
     find.add_argument("--max-directories", type=int, default=50000)
     find.set_defaults(run=find_repo)
+    restore = commands.add_parser(
+        "restore", help="restore a fixture file with Python and verify its SHA-256")
+    restore.add_argument("--source", required=True)
+    restore.add_argument("--dest", required=True)
+    restore.add_argument("--overwrite", action="store_true",
+                         help="explicitly authorise replacing an existing destination")
+    restore.add_argument("--expected-sha256")
+    restore.set_defaults(run=restore_file)
     args = parser.parse_args()
     try:
         # Commands return 1 for a reported negative outcome (JSON on stdout).

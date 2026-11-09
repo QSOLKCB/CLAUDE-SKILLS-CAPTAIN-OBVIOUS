@@ -140,7 +140,7 @@ def find_repo(args: argparse.Namespace) -> int:
         roots.append(root)
     roots = sorted(set(roots))
     repo_name = expected.split("/", 1)[1].lower()
-    seen_dirs, seen_checkouts = set(), set()
+    best_depth, seen_checkouts = {}, set()  # directory identity -> shallowest depth seen
     checkouts, symlinks, unreadable = [], set(), set()
     depth_limit = truncated = False
     scanned = 0
@@ -154,9 +154,10 @@ def find_repo(args: argparse.Namespace) -> int:
                 unreadable.add(str(directory))
                 continue
             identity = (metadata.st_dev, metadata.st_ino)
-            if identity in seen_dirs:
+            # Revisit when reached shallower: a later root may grant more remaining depth.
+            if best_depth.get(identity, args.max_depth + 1) <= depth:
                 continue
-            seen_dirs.add(identity)
+            best_depth[identity] = depth
             if scanned >= args.max_directories:
                 truncated = True
                 break
@@ -358,9 +359,11 @@ def receipt(args: argparse.Namespace) -> None:
 
 def restore_file(args: argparse.Namespace) -> None:
     """Copy fixture bytes with Python file operations; never through a shell alias."""
-    expected = args.expected_sha256.lower() if args.expected_sha256 else None
+    # None means omitted; an explicit empty value (e.g. an unset variable) is malformed.
+    expected = None if args.expected_sha256 is None else args.expected_sha256.lower()
     if expected is not None and not DIGEST.fullmatch(expected):
-        raise ValueError("--expected-sha256 must be 64 hexadecimal characters")
+        raise ValueError("--expected-sha256 must be 64 hexadecimal characters "
+                         f"(got {args.expected_sha256!r}); omit it to skip the check")
     source, dest = Path(args.source), Path(args.dest)
     reject_symlink_components(source, "source")
     reject_symlink_components(dest, "destination")
@@ -552,9 +555,18 @@ def audit_body(root: Path, folder: Path, body: str, row: dict, add,
             f"needs at least 2 numbered steps and 60 words; found {steps} step(s), {words} word(s)")
     if PLACEHOLDER.search(strip_code_spans(body)):
         add("PLACEHOLDER_TEXT", "body contains placeholder text such as TODO, TBD or FIXME")
-    references = set(INTERPRETER_REF.findall(body)) | set(DOT_SLASH_REF.findall(body))
+    # raw path -> True only if some occurrence is a direct invocation (./script),
+    # not an argument to an interpreter (python3 ./script.py needs no execute bit).
+    references, interpreter_args = {}, []
+    for match in INTERPRETER_REF.finditer(body):
+        interpreter_args.append(match.span(1))
+        references.setdefault(match.group(1), False)
+    for match in DOT_SLASH_REF.finditer(body):
+        if not any(start <= match.start(1) < end for start, end in interpreter_args):
+            references[match.group(1)] = True
     found = set()
     for raw in sorted(references):
+        direct = references[raw]
         skill_relative = raw.startswith("${CLAUDE_SKILL_DIR}/")
         if not ("/" in raw or raw.endswith(SCRIPT_SUFFIXES)):
             continue  # e.g. `python3 -m unittest` or prose such as "python3 is required"
@@ -572,6 +584,14 @@ def audit_body(root: Path, folder: Path, body: str, row: dict, add,
             candidates = [root / raw, folder / raw]
         resolved = None
         for candidate in candidates:
+            # Check symlinks on the path as written, before '..' is collapsed:
+            # tools/link/../x.py runs whatever lies next to link's *target*.
+            parts = candidate.parts[len(root.parts):]
+            if any(root.joinpath(*parts[:size]).is_symlink()
+                   for size in range(1, len(parts) + 1)):
+                add("UNSAFE_REFERENCE", f"{raw} passes through a symlink")
+                resolved = False
+                break
             target = Path(os.path.normpath(candidate))
             if not target.is_relative_to(root):
                 add("UNSAFE_REFERENCE", f"{raw} resolves outside the repository")
@@ -593,7 +613,7 @@ def audit_body(root: Path, folder: Path, body: str, row: dict, add,
         if not resolved.is_file():
             add("MISSING_UTILITY", f"referenced executable {raw} is not a regular file")
             continue
-        if raw.startswith("./") and not os.access(resolved, os.X_OK):
+        if direct and not os.access(resolved, os.X_OK):
             add("NOT_EXECUTABLE", f"{raw} is invoked directly but is not executable")
         found.add(relative.as_posix())
     row["referenced_executables"] = sorted(found)

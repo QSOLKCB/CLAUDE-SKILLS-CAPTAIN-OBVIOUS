@@ -37,7 +37,7 @@ Python cannot discover aliases or functions defined in another shell process. Al
     declare -f cp      # bash: prints a shell function named cp, if any
     type -a cp         # bash: every candidate, in lookup order
 
-To bypass an alias or function for a single command, use `command cp …` or `\cp …`. For startup files, look in `~/.bashrc`, `~/.bash_aliases`, `~/.zshrc` and `~/.profile`. Editing them is the operator's decision, not the agent's.
+To bypass both aliases and shell functions for a single command, use `command cp …`. `\cp` bypasses aliases only: if `cp` is a shell function, `\cp` still calls that function, which can reproduce the same silent non-restore. For startup files, look in `~/.bashrc`, `~/.bash_aliases`, `~/.zshrc` and `~/.profile`. Editing them is the operator's decision, not the agent's.
 
 ## Utility contract
 - Uses Python file operations only. No shell, alias or function is consulted.
